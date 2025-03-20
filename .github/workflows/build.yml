@@ -1,0 +1,66 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get Architecture
+        run: echo "arch=$(dpkg-architecture -q DEB_TARGET_GNU_CPU)" >> "$GITHUB_ENV"
+      - name: Build
+        run: cargo build --release
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swupdate-httpd-${{ env.arch }}
+          path: target/release/swupdate-httpd
+          retention-days: 1
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check README updated
+        run: |
+          cargo install cargo-readme
+          cargo readme > README.md
+          if [ ! -z "$(git status --untracked-files=no --porcelain)" ]; then
+            echo "::debug::$(git status --untracked-files=no --porcelain)"
+            echo "::error title=Readme outdated::The README.md file is outdated. Please run 'cargo readme > README.md' and commit the changes."
+            exit 1
+          fi
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: swupdate-httpd-x86_64
+          path: swupdate-httpd-x86_64
+      - uses: actions/download-artifact@v4
+        with:
+          name: swupdate-httpd-aarch64
+          path: swupdate-httpd-aarch64
+      - name: Collect and rename artifacts
+        run: |
+          mkdir release
+          cp swupdate-httpd-x86_64/swupdate-httpd release/swupdate-httpd-x86_64
+          cp swupdate-httpd-aarch64/swupdate-httpd release/swupdate-httpd-aarch64
+      - name: Create release (latest)
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.ACTIONS_ACCESS_TOKEN }}"
+          prerelease: false
+          automatic_release_tag: "latest"
+          files: release/*
