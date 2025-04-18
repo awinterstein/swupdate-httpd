@@ -1,0 +1,41 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # needed so that the tag message instead of the commit message can be retrieved
+          ref: ${{ github.ref }}
+      - name: Extract release version from the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        id: extract_version
+        run: |
+           echo "version=${TAG##*/}" >> $GITHUB_OUTPUT
+           echo "message=$(git tag -l --format='%(contents)' ${TAG} | head -n1)" >> $GITHUB_OUTPUT
+      - name: Build (x86_64)
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+      - name: Collect artifacts for release
+        run: |
+          mkdir -p dist/release
+          cp target/x86_64-unknown-linux-gnu/release/swupdate-httpd dist/release/swupdate-httpd-x86_64
+      - name: Create release
+        uses: actions/forgejo-release@v2.6.0
+        with:
+          direction: upload
+          override: true
+          title:  ${{ steps.extract_version.outputs.version }}
+          release-dir: dist/release
+          release-notes: ${{ steps.extract_version.outputs.message }}
+          token: ${{ secrets.PACKAGE_WRITE_TOKEN }}

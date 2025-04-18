@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check README updated
+        run: |
+          cargo install cargo-readme
+          cargo readme > README.md
+          if [ ! -z "$(git status --untracked-files=no --porcelain)" ]; then
+            echo "::debug::$(git status --untracked-files=no --porcelain)"
+            echo "::error title=Readme outdated::The README.md file is outdated. Please run 'cargo readme > README.md' and commit the changes."
+            exit 1
+          fi
